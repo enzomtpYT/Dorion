@@ -1,0 +1,141 @@
+name: Build Flatpak
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g. 6.12.2). Defaults to version in manifest.'
+        required: false
+        default: ''
+
+jobs:
+  flatpak:
+    name: Flatpak (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:gnome-46
+      options: --privileged
+
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="$(grep -oP '(?<=releases/download/v)[0-9.]+' flatpak/com.spikehd.dorion.yml | head -1)"
+          fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update manifest with release version
+        if: github.event_name == 'release' || github.event.inputs.version != ''
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          if [ -z "${VERSION}" ]; then
+            echo "Error: could not determine version to build" >&2
+            exit 1
+          fi
+          echo "Building Flatpak for version ${VERSION}"
+
+          BASE_URL="https://github.com/${OWNER}/${REPO}/releases/download/v${VERSION}"
+
+          declare -A SHAS
+          # Update all three arch entries to keep the manifest consistent,
+          # even though only x86_64 and aarch64 are built in the matrix.
+          for ARCH in amd64 arm64 armhf; do
+            curl -fLo "/tmp/dorion_${ARCH}.deb" "${BASE_URL}/Dorion_${VERSION}_${ARCH}.deb"
+            SHAS[$ARCH]="$(sha256sum "/tmp/dorion_${ARCH}.deb" | awk '{print toupper($1)}')"
+            export "SHA_${ARCH^^}=${SHAS[$ARCH]}"
+          done
+
+          python3 - <<'PYEOF'
+          import re, os
+
+          version  = os.environ['VERSION']
+          owner    = os.environ['OWNER']
+          repo     = os.environ['REPO']
+          shas     = {
+              'amd64': os.environ['SHA_AMD64'],
+              'arm64': os.environ['SHA_ARM64'],
+              'armhf': os.environ['SHA_ARMHF'],
+          }
+
+          manifest = 'flatpak/com.spikehd.dorion.yml'
+          base     = f'https://github.com/{owner}/{repo}/releases/download/v{version}'
+
+          with open(manifest) as f:
+              content = f.read()
+
+          for arch, new_sha in shas.items():
+              new_url = f'{base}/Dorion_{version}_{arch}.deb'
+              # Update URL
+              content = re.sub(
+                  r'url: https://[^\n]+_' + arch + r'\.deb',
+                  f'url: {new_url}',
+                  content,
+              )
+              # Update the sha256 that immediately follows this arch's URL line
+              content = re.sub(
+                  r'(url: https://[^\n]+_' + arch + r'\.deb\n\s+sha256: )[A-Fa-f0-9]{64}',
+                  r'\g<1>' + new_sha,
+                  content,
+              )
+
+          with open(manifest, 'w') as f:
+              f.write(content)
+
+          print(f"Updated manifest for version {version}")
+          PYEOF
+
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: dorion-${{ matrix.arch }}.flatpak
+          manifest-path: flatpak/com.spikehd.dorion.yml
+          arch: ${{ matrix.arch }}
+          cache-key: flatpak-builder-${{ github.sha }}-${{ matrix.arch }}
+
+      - name: Upload Flatpak bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: dorion-flatpak-${{ matrix.arch }}
+          path: dorion-${{ matrix.arch }}.flatpak
+
+  attach-to-release:
+    name: Attach Flatpaks to Release
+    runs-on: ubuntu-latest
+    needs: flatpak
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Flatpak artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dorion-flatpak-*
+          path: flatpaks/
+          merge-multiple: true
+
+      - name: Attach bundles to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: flatpaks/*.flatpak
