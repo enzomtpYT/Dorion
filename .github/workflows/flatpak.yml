@@ -139,11 +139,23 @@ jobs:
     name: Attach Flatpaks to Release
     runs-on: ubuntu-latest
     needs: flatpak
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')
     permissions:
       contents: write
 
     steps:
+      - name: Determine release tag
+        id: release_tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+            VERSION="${VERSION#v}"
+            TAG="v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
       - name: Download Flatpak artifacts
         uses: actions/download-artifact@v4
         with:
@@ -154,4 +166,5 @@ jobs:
       - name: Attach bundles to release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
           files: flatpaks/*.flatpak
