@@ -1,10 +1,10 @@
 name: Build
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
   push:
+    tags:
+      - 'v*'
     paths:
       - '.github/workflows/build.yml'
       - 'package.json'
