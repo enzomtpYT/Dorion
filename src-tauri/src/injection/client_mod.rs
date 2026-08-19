@@ -4,6 +4,7 @@ use phf::phf_map;
 use crate::{
   config::{get_config, write_config_file},
   log,
+  util::http::blocking_client,
 };
 
 flate!(pub static FALLBACK: str from "./injection/shelter.js");
@@ -68,7 +69,7 @@ pub fn load_mods_js() -> String {
       .script;
 
     tasks.push(std::thread::spawn(move || {
-      let response = match reqwest::blocking::get(script_url) {
+      let response = match blocking_client().get(script_url).send() {
         Ok(r) => r,
         Err(e) => {
           log!("Failed to load client mod JS for {}: {:?}", mod_name, e);
@@ -149,7 +150,7 @@ pub fn load_mods_css() -> String {
     }
 
     tasks.push(std::thread::spawn(move || {
-      let response = match reqwest::blocking::get(styles_url) {
+      let response = match blocking_client().get(styles_url).send() {
         Ok(r) => r,
         Err(e) => {
           log!("Failed to load client mod CSS for {}: {:?}", mod_name, e);

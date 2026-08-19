@@ -1,16 +1,16 @@
 use rsrpc::{
-  detection::{DetectableActivity, Executable},
   RPCConfig, RPCServer,
+  detection::{DetectableActivity, Executable},
 };
 use std::sync::{
-  atomic::{AtomicBool, Ordering},
   Arc, Mutex,
+  atomic::{AtomicBool, Ordering},
 };
 use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 use tauri::{Emitter, Listener};
 use window_titles::ConnectionTrait;
 
-use crate::{config::get_config, log, util::paths::custom_detectables_path};
+use crate::{config::get_config, log, util::http::blocking_client, util::paths::custom_detectables_path};
 
 // We keep track of this A) To not spam enable and B) to allow for the user to manually disable without it being re-enabled automatically
 static OBS_OPEN: AtomicBool = AtomicBool::new(false);
@@ -65,10 +65,20 @@ pub fn start_rpc_server(win: tauri::WebviewWindow) {
     std::env::set_var("RSRPC_LOGS_ENABLED", "1")
   };
 
-  let detectable = reqwest::blocking::get("https://discord.com/api/v9/applications/detectable")
-    .expect("Request for detectable.json failed")
-    .text()
-    .expect("Failed to get text from response");
+  let detectable =
+    match blocking_client().get("https://discord.com/api/v9/applications/detectable").send() {
+      Ok(resp) => match resp.text() {
+        Ok(text) => text,
+        Err(e) => {
+          log!("Failed to read detectable.json response: {:?}", e);
+          return;
+        }
+      },
+      Err(e) => {
+        log!("Request for detectable.json failed: {:?}", e);
+        return;
+      }
+    };
 
   let config = get_config();
   let rpc_config = RPCConfig {
@@ -76,6 +86,7 @@ pub fn start_rpc_server(win: tauri::WebviewWindow) {
     enable_ipc_connector: config.rpc_ipc_connector.unwrap_or(true),
     enable_websocket_connector: config.rpc_websocket_connector.unwrap_or(true),
     enable_secondary_events: config.rpc_secondary_events.unwrap_or(true),
+    port: config.rpc_port.unwrap_or(1337),
   };
   let server = match RPCServer::from_json_str(detectable, rpc_config) {
     Ok(server) => Arc::new(Mutex::new(server)),
@@ -184,7 +195,12 @@ pub fn start_rpc_server(win: tauri::WebviewWindow) {
       });
   }
 
-  server.lock().unwrap().start();
+  if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    server.lock().unwrap().start();
+  })) {
+    log!("RPC server start panicked: {:?}", e);
+    return;
+  }
 
   // Add any local custom detectables
   server
@@ -194,7 +210,6 @@ pub fn start_rpc_server(win: tauri::WebviewWindow) {
 
   loop {
     std::thread::park();
-    std::thread::sleep(std::time::Duration::from_secs(1));
   }
 }
 

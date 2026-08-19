@@ -10,12 +10,19 @@ static OS: &str = "(Macintosh; Intel Mac OS X 10_15_7)";
 #[cfg(target_os = "linux")]
 static OS: &str = "(X11; Linux x86_64)";
 
+#[cfg(target_os = "windows")]
 fn useragent(chrome_version: Option<String>) -> String {
-  let chrome_version = chrome_version.unwrap_or("131.0.0.0".to_string());
+  let chrome_version = chrome_version.unwrap_or("138.0.0.0".to_string());
 
   format!(
     "Mozilla/5.0 {OS} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version} Safari/537.36"
   )
+}
+
+#[cfg(not(target_os = "windows"))]
+fn useragent(_chrome_version: Option<String>) -> String {
+  format!("Mozilla/5.0 {OS} AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15")
+    .to_string()
 }
 
 pub fn clear_cache_check() {
@@ -110,8 +117,8 @@ pub fn remove_top_bar(_win: tauri::WebviewWindow) {}
 #[cfg(target_os = "windows")]
 pub fn set_user_agent(win: &tauri::WebviewWindow) {
   use tauri::webview::PlatformWebview;
-  use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2Settings2, ICoreWebView2_2};
-  use windows::core::{Interface, HSTRING, PWSTR};
+  use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2_2, ICoreWebView2Settings2};
+  use windows::core::{HSTRING, Interface, PWSTR};
 
   win
     .with_webview(|webview| unsafe {

@@ -1,6 +1,7 @@
 use tauri::{Emitter, Manager};
 
 use crate::log;
+use crate::util::http::async_client;
 use crate::util::paths::{config_is_local, updater_dir};
 
 #[tauri::command]
@@ -68,7 +69,7 @@ pub async fn maybe_latest_main_release(
   win: &tauri::WebviewWindow,
 ) -> Result<bool, Box<dyn std::error::Error + Sync + Send>> {
   let url = "https://api.github.com/repos/SpikeHD/Dorion/releases/latest";
-  let client = reqwest::Client::new();
+  let client = async_client();
   let response = client
     .get(url)
     .header("User-Agent", "Dorion")
