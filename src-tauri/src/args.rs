@@ -28,7 +28,10 @@ pub struct Args {
   #[options(help = "(windows only) additional arguments to pass to the webview process")]
   pub webview_args: String,
 
-  #[options(help = "set the profile to load. overrides the profile set in config", meta = "PROFILE")]
+  #[options(
+    help = "set the profile to load. overrides the profile set in config",
+    meta = "PROFILE"
+  )]
   pub profile: Option<String>,
 }
 
@@ -39,7 +42,7 @@ impl Args {
 }
 
 // Lazy static to hold parsed args
-static PARSED_ARGS: LazyLock<Args> = LazyLock::new(|| Args::parse());
+static PARSED_ARGS: LazyLock<Args> = LazyLock::new(Args::parse);
 
 pub fn is_help() -> bool {
   // Parsing will automatically print help information

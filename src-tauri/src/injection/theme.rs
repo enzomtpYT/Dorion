@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::{config::get_config, util::paths::get_theme_dir};
+use crate::{config::get_config, util::http::blocking_client, util::paths::get_theme_dir};
 
 fn theme_is_enabled(name: String) -> bool {
   let config = get_config();
@@ -82,7 +82,7 @@ pub fn theme_from_link(link: String, filename: Option<String>) -> String {
     filename.push_str(".css");
   }
 
-  let resp = reqwest::blocking::get(&link);
+  let resp = blocking_client().get(&link).send();
 
   if resp.is_err() {
     return String::new();

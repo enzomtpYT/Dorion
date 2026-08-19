@@ -1,11 +1,12 @@
 use crate::log;
+use crate::util::http::async_client;
 
 pub async fn localize_js(url: String) -> String {
   if url.is_empty() {
     return String::new();
   }
 
-  let response = match reqwest::get(&url).await {
+  let response = match async_client().get(&url).send().await {
     Ok(r) => r,
     Err(e) => {
       log!("Request failed: {}", e);
