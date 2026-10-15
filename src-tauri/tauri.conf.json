@@ -45,7 +45,7 @@
     }
   },
   "productName": "Dorion",
-  "version": "6.13.1",
+  "version": "6.13.2",
   "identifier": "com.spikehd.dorion",
   "plugins": {
     "deep-link": {
@@ -54,6 +54,9 @@
           "discord"
         ]
       }
+    },
+    "shell": {
+      "open": "(?:https?://|mailto:|tel:|(?:spotify|steam|tidal|itunes|com\\.epicgames\\.launcher):[/:]{0,2})[\\w+./:%?&=+#,@!-]+"
     }
   },
   "app": {

@@ -63,8 +63,8 @@ pub fn configure(window: &tauri::WebviewWindow) {
   // Listen for idle change
   start_idle_watcher(window);
 
-  // If the subscription is dropped, Mundy's internal thread will exit and no events will ever be recieved
-  Box::leak(Box::new(start_os_accent_subscriber(window)));
+  // Keep the OS accent subscription alive for the process lifetime
+  start_os_accent_subscriber(window);
 
   #[cfg(feature = "hotkeys")]
   #[cfg(not(target_os = "macos"))]
@@ -89,6 +89,8 @@ pub fn configure(window: &tauri::WebviewWindow) {
     if config.start_maximized.unwrap_or(false) {
       window.maximize().unwrap_or_default();
     }
+
+    window_zoom_level(event_window.clone(), None);
   });
 
   #[cfg(feature = "blur")]
